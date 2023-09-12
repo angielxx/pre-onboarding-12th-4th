@@ -9,7 +9,19 @@ import App from './App.tsx';
 import theme from '@/styles/theme.ts';
 import GlobalStyle from '@/styles/GlobalStyle.tsx';
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: false,
+      suspense: true,
+      useErrorBoundary: true,
+      staleTime: 1000 * 60 * 60,
+      cacheTime: 1000 * 60 * 5,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+    },
+  },
+});
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
