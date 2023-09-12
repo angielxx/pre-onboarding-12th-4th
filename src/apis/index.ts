@@ -1,6 +1,9 @@
-export const getData = async () => {
-  const response = await fetch('./src/data/mock_data.json');
-  const { response: data } = await response.json();
+import ApiClient from './client';
 
-  return data;
+const { VITE_BASE_URL } = import.meta.env;
+
+const client = new ApiClient(VITE_BASE_URL);
+
+export const getData = async () => {
+  return client.get('/data');
 };
