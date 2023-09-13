@@ -10,3 +10,9 @@ export interface MainDataType {
   bar: number[];
   area: number[];
 }
+
+export type BarData = {
+  x: string;
+  y: number;
+  fillColor?: string;
+};
