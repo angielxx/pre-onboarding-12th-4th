@@ -3,11 +3,12 @@ import { styled } from 'styled-components';
 interface Props {
   title: string;
   isSelected: boolean;
+  onClick: () => void;
 }
 
-export const FilterChip = ({ title, isSelected, ...rest }: Props) => {
+export const FilterChip = ({ title, isSelected, onClick, ...rest }: Props) => {
   return (
-    <ChipContainer isSelected={isSelected} {...rest}>
+    <ChipContainer isSelected={isSelected} onClick={onClick} {...rest}>
       <p>{title}</p>
     </ChipContainer>
   );

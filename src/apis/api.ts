@@ -1,5 +1,5 @@
-import ApiClient from './client';
 import { ResponseType } from '@/types/response';
+import ApiClient from '@/apis/client';
 
 const { VITE_BASE_URL } = import.meta.env;
 
