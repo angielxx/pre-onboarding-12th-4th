@@ -26,7 +26,14 @@ export const MainChart = () => {
   const chartRef = useRef<ChartType | null>(null);
 
   interface ChartType extends ReactApexChart {
-    chart: any;
+    chart: {
+      updateOptions: (
+        newOptions: ApexOptions | null,
+        redrawPaths?: boolean,
+        animate?: boolean,
+        updateSyncedCharts?: boolean,
+      ) => void;
+    };
   }
 
   const colorBySelectedId = useCallback(
