@@ -42,244 +42,413 @@ https://pre-onboarding-12th-4th.vercel.app/
 
 1. 코드의 가독성 및 재사용성
 
-   - 스토어를 기능에 따라 분리하여 사용
-   - 재사용 가능한 기능(debounce, fetch)을 커스텀 훅으로 정의
+   - 재사용 가능한 커스텀 훅
+   - 한 컴포넌트를 구성하고 있는 컴포넌트들의 추상화 정도를 비슷하게 맞춰 코드 가독성을 높였습니다.
 
 2. 성능 최적화
 
-   - 검색창 입력값에 debounce를 적용하여 API 호출 횟수 최적화
-   - API 호출의 결과를 로컬 스토리지에 캐싱하여 재사용
+   - React query의 캐싱기능을 활용하여
+
+3. Suspense 및 Error boundary의 사용
 
 ---
 
 ## 🛠️ 구현 설명
 
-### 1. 검색창
+### 1. 시계열 차트 구현
 
-아래 경우의 수를 모두 핸들링할 수 있도록 구현했습니다.
+#### 데이터 타입 정의 및 정제
 
-- [x] input 값 없을 때 최근 검색어 목록 보이기
-- [x] input 값 있을 때 추천 검색어 목록 보이기
-- [x] 키보드 이동시 최근검색어 혹은 추천검색어 중 선택된 검색어를 input에 반영
-- [x] 키보드 이동 후 change 이벤트 발생 시 변경된 input 값으로 재반영
-- [x] 마우스를 호버시 최근검색어 혹은 추천검색어 중 호버된 검색어를 input에 반영
+차트를 시각화하는데 사용하고 있는 라이브러리인 Apexcharts의 사용법을 훑어본 결과, 데이터의 원본 그대로 차트에 사용하기 어려워보였습니다. 그래서 데이터 차트를 시각화하기 위해 필요한 데이터의 인터페이스를 먼저 정의했습니다.
 
-#### keywordStore
-
-input창과 관련된 상태와 액션들을 관리할 수 있는 keywordStore를 분리하여 작성했습니다.
-
-```javascript
-// keywordStore.ts
-const useKeywordStore = create<State>()(
-  devtools((set, get) => ({
-    isShowList: false,
-    isKeyDown: false,
-
-    keyword: '',
-    inputValue: '',
-
-    selectedId: -1,
-    keywordsList: [],
-
-    setState: newState => set({ ...get(), ...newState }),
-
-    setIsShowList: isShowList => set({ ...get(), isShowList }),
-    setIsKeyDown: isKeyDown => set({ ...get(), isKeyDown }),
-
-    setKeyword: keyword => set({ ...get(), keyword }),
-    setInputValue: inputValue => set({ ...get(), inputValue }),
-
-    setSelectedId: selectedId => set({ ...get(), selectedId }),
-    setKeywordsList: keywordsList => set({ ...get(), keywordsList }),
-  })),
-);
+```typescript
+// src/types/chart.ts
+export interface MainDataType {
+  id: string[];
+  labels: string[];
+  bar: number[];
+  area: number[];
+}
 ```
 
-특히, 아래 두 가지 값을 통해 사용자의 검색어를 관리했습니다. inputValue의 경우 사용자에 의해 입력된 문자를 보존하여 제공하기 위해 사용했으며, 키보드 이동 혹은 마우스 호버 이벤트로 최근 검색어 또는 추천 검색어 선택시 keyword에 반영했습니다. 이때 엔터 등의 이벤트 발생 시 최종적으로 사용자가 선택하는 검색어는 keyword가 되도록 구현했습니다.
+데이터 fetch시 위와 같이 정의한 MainDataType에 맞게 데이터를 정제하여 반환하는 유틸함수를 정의했습니다.
 
-- keyword : 검색에 최종적으로 반영될 검색어
-- inputValue : 사용자의 의해 입력된 값
+```typescript
+// src/utils/mainData.ts
+export const FetchAndDefineMainData: () => Promise<MainDataType> = async () => {
+  const data = await getData();
+  const labels: string[] = [];
+  const bar: number[] = [];
+  const area: number[] = [];
+  const id: string[] = [];
 
-#### keyDown 이벤트 핸들러
-
-input의 keyDown 핸들러에서 주목할 점은 두 가지 입니다.
-
-1. 한글 입력 시 핸들러 중복 호출 방지
-
-   - IME composition을 통해 OS와 브라우저 두 곳에서 keydown이벤트가 처리되기 때문에 핸들러가 두 번 호출되는 문제가 있었습니다 이를 방지하기 위해 keyboardEvent의 isComposing 속성이 true 일 때 핸들러가 작동하지 않도록 방지했습니다.
-
-2. 위, 아래 방향키 입력 시 커서 이동 방지
-
-- 위, 아래 방향키 입력 시 커서가 이동되는 현상이 발생했습니다. 이러한 현상을 방지하기 위해 event.preventDefault()로 기본 동작을 통한 커서 이동을 방지했습니다.
-
-```javascript
-// TextInput.tsx
-
-//...
-const handleKeyDown = async (event: KeyboardEvent<HTMLInputElement>) => {
-  if (event.nativeEvent.isComposing) return;
-
-  const { key } = event;
-
-  if (key === 'ArrowUp') {
-    event.preventDefault();
-    setIsKeyDown(true);
-    setSelectedId(Math.max(selectedId - 1, -1));
-  } else if (key === 'ArrowDown') {
-    event.preventDefault();
-    setIsKeyDown(true);
-    setSelectedId(Math.min(selectedId + 1, keywordsList.length - 1));
-  } else if (key === 'Enter' && keyword.trim()) {
-    event.preventDefault();
-    addKeyword(keyword);
-    setIsKeyDown(false);
-    setIsShowList(false);
-    setKeyword('');
-    await setInputValue('');
-    setSelectedId(-1);
-    inputRef.current?.blur();
+  for (const [key, value] of Object.entries(data)) {
+    id.push(value.id);
+    labels.push(key);
+    bar.push(value['value_bar']);
+    area.push(value['value_area']);
   }
+  return { labels, bar, area, id };
 };
 ```
 
-#### 최근 검색어 및 추천 검색어 목록 표시
+#### UI 로직과 비즈니스 로직의 분리
 
-사용자의 입력값이 없을 때 최근 검색어를, 입력값이 발생했을 때 추천 검색어를 제공했습니다. 두 가지의 경우를 명시적으로 표시하기 위해 삼항 연산자를 사용하지 않고, 각 상태를 변수로 표시하여 그에 맞는 검색어를 제공했습니다.
+MainChart 컴포넌트에는 UI 관련한 로직만 있을 수 있도록 Chart의 내용이나 옵션을 구성하는 복잡하고 긴 로직을 useMainChartConfig라는 커스텀 훅으로 분리했습니다.
 
-```javascript
-// KeywordsList.tsx
-export const KeywordsList = () => {
+```typescript
+// src/hooks/useMainChartConfig.tsx
+export const useMainChartConfig = ({ data, selectedId }: Props) => {
+  const [options, setOptions] = useState<ApexOptions | null>(null);
+  const [series, setSeries] = useState<SeriesType[] | null>();
+  //...
+
+  // data에 따라 options을 구성하는 로직
+  useEffect(() => {
+    if (!data) return;
+
+    const newOption: ApexOptions = {
+      chart: {
+        height: 350,
+        type: 'line',
+        stacked: false,
+      },
+      // ...more options
+    };
+
+    setOptions(newOption);
+  }, [data, selectedId, colorBySelectedId]);
+
+  // data에 따라 series를 구성하는 로직
+  useEffect(() => {
+    if (!data) return;
+
+    setSeries([
+      {
+        name: 'value_bar',
+        type: 'column',
+        data: data.bar,
+      },
+      {
+        name: 'value_area',
+        type: 'area',
+        data: data.area,
+      },
+    ]);
+  }, [data]);
+
+  // options과 series를 반환
+  return {
+    series,
+    options,
+  };
+};
+```
+
+커스텀 훅을 통해 로직을 분리한 결과, MainChart에서는 UI를 구성하는데 필요한 series, options의 결과값만을 받아 Chart UI를 구성하는 데 바로 사용하는 것을 보실 수 있습니다.
+
+```typescript
+// src/components/Chart/MainChart.tsx
+export const MainChart = () => {
+  const { data } = useQuery(['data'], FetchAndDefineMainData);
+
+  const { series, options } = useMainChartConfig({ data, selectedId });
+
   // ...
 
-  const list_type = inputValue ? 'recommended' : 'recent';
-
-  useEffect(() => {
-    if (list_type === 'recent') {
-      setKeywordsList(recentKeywords);
-    }
-    if (list_type === 'recommended') {
-      setKeywordsList(data);
-    }
-  }, [data, recentKeywords, list_type, setKeywordsList]);
-
   return (
-    <>
-      {list_type === 'recent' && <RecentKeywordsList />}
-      {list_type === 'recommended' && <RecommendedKeywordsList />}
-    </>
+    <ChartWrapper>
+      <FilterList selectedId={selectedId} selectId={chooseFilter} />
+      {options && series && (
+        <ApexCharts ref={chartRef} options={options} series={series} type="line" height={350} />
+      )}
+    </ChartWrapper>
   );
 };
 ```
 
-### 2. 추천 검색어 제공
+#### React Query의 캐싱기능을 통해 API 요청 최적화
 
-- 어떠한 값에 대해 특정 시간이 지난 후 변화를 감지하는 debounce 기능을 커스텀 훅으로 분리했습니다.
+React Query의 캐싱기능을 통해 API 요청 후 1시간(staleTime) 동안 캐시된 데이터를 사용하도록 했습니다. StaleTime의 경우, 주어진 mock data가 모두 2023년 2월 1일의 데이터임을 확인하고 현재 시점(2023년 9월 13일) 기준으로 과거의 데이터이기 때문에 최신 데이터를 반영할 필요가 없다고 생각하여 StaleTime을 1시간으로 길게 설정했습니다.
 
-```javascript
-// useDebounce.tsx
-import { useState, useEffect } from 'react';
-
-export default function useDebounce<T>(value: T, delay = 300) {
-  const [debouncedValue, setDebouncedValue] = useState(value);
-
-  useEffect(() => {
-    const timerId = setTimeout(() => {
-      setDebouncedValue(value);
-    }, delay);
-
-    return () => {
-      clearTimeout(timerId);
-    };
-  }, [value, delay]);
-
-  return debouncedValue;
-}
+```typescript
+// src/main.tsx
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: false,
+      suspense: true,
+      useErrorBoundary: true,
+      staleTime: 1000 * 60 * 60,
+      cacheTime: 1000 * 60 * 5,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+    },
+  },
+});
 ```
 
-- 검색어에 대한 API 호출을 담당하는 커스텀 훅 useSearchQuery를 정의했습니다.
-- 사용자의 검색어에 debounce를 적용하여 API 호출 횟수를 최적화했습니다.
-- 검색어에 대한 API 호출을 하기 전 'cache hit'인 경우 캐시된 데이터를 사용하고, 'cache miss'인 경우 API를 호출하도록 했습니다.
+캐시된 데이터가 사용되는 것을 눈으로 확인할 수 있도록 하기 위해, 차트 보기/숨기기 버튼을 구현했습니다. '차트 보기' 버튼 클릭 시 최초 API 요청 이후 '차트 숨기기'를 클릭하고 다시 '차트 보기'를 클릭했을 때, 'loading...'이 나타나지 않는 것을 확인할 수 있습니다.
 
-```javascript
-// useSearchQuery.tsx
-export const useSearchQuery = () => {
-  const { setCache, findCache } = useCacheStore(state => state);
+또한 filterList에서 fetch한 데이터를 사용하여 사용자에게 제공 가능한 filter의 목록을 정제해야 했습니다. 이 때, 필요한 데이터인 MainData의 queryKey를 사용하여 queryClient에서 꺼내서 사용했습니다.
 
-  const { keyword, isKeyDown } = useKeywordStore(state => state);
+```typescript
+// src/components/Filter/FilterList.tsx
+export const FilterList = ({ selectedId, selectId }: Props) => {
+  const queryclient = useQueryClient();
+  const data = queryclient.getQueryData<MainDataType>(['MainData']);
 
-  const { setIsLoading, setData } = useFetchStore(state => state);
-
-  const debouncedKeyword = useDebounce(keyword, 300);
+  const [filterIds, setFilterIds] = useState<string[] | null>(null);
 
   useEffect(() => {
-    const fetchData = async (text: string) => {
-      if (isKeyDown) return;
+    if (!data) return;
 
-      try {
-        setIsLoading(true);
-        const { data } = await searchByKeyword(text);
-        setData(data);
-        setCache(text, data);
-      } catch (err) {
-        setError(err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
+    setFilterIds(Array.from(new Set(data.id)));
+  }, [data]);
 
-    if (isKeyDown) return;
-    if (keyword === '') return;
-
-    const cacheResult = findCache(keyword);
-
-    if (cacheResult) {
-      // 'cache hit'
-      setData(cacheResult);
-    } else {
-      // 'cache miss'
-      fetchData(debouncedKeyword);
-    }
-  }, [isKeyDown, keyword, debouncedKeyword]);
-
-  return;
+  return; //...
 };
 ```
 
-### 3. API 결과 캐싱 기능
+#### React Query + Suspense + Error Boundary
 
-- zustand의 persist middleware를 사용하여 local storage에 저장했습니다.
-- 캐싱 관련한 로직만 담당하는 store인 cacheStore를 분리하여 작성했습니다.
-- expire time의 기본값을 상수화하여 명시적으로 표현했습니다.
-- expirre time를 인자로 받아 그 값에 따라 캐시 기한을 저장했습니다.
+React의 Suspense와 Error Boundary를 사용하여 Loading 상태와 Error 상태에 따른 적절한 Fallback UI를 사용자에게 제공하고, React Query의 QueryErrorResetBoundary를 사용하여 Error 발생 시 해당 요청을 재시도하고 ErrorBoundary를 리셋하여 Error에 대한 가이드를 제공했습니다.
 
-```javascript
-// cacheStore.ts
-export const DEFAULT_EXPIRE_TIME = 1000 * 60 * 60;
+QueryErrorResetBoundary, ErrorBoundary와 Suspense를 사용하여 컴포넌트를 감싸는 부분을 재사용할 수 있도록 컴포넌트화 했습니다.
 
-const useCacheStore = create<State>()(
-  devtools(
-    persist(
-      (set, get) => ({
-        cache: {},
+```typescript
+export const ResetBoundaryWrapper = ({ children }: Props) => {
+  return (
+    <QueryErrorResetBoundary>
+      {({ reset }) => (
+        <ErrorBoundary
+          onReset={reset}
+          fallbackRender={({ error, resetErrorBoundary }) => (
+            <ErrorFallback reset={resetErrorBoundary} error={error} />
+          )}
+        >
+          <Suspense fallback={<Loading />}>{children}</Suspense>
+        </ErrorBoundary>
+      )}
+    </QueryErrorResetBoundary>
+  );
+};
+```
 
-        setCache: (key, data, expireTime = DEFAULT_EXPIRE_TIME): void => {
-          const due = Date.now() + expireTime;
-          set(state => ({ cache: { ...state.cache, [key]: { data, due } } }));
+```typescript
+// src/components/Fallback/ErrorFallback.tsx
+export const ErrorFallback = ({ reset, error }: Props) => {
+  const resetOnClick = () => reset();
+
+  return (
+    <div>
+      <p>{error?.message}</p>
+      <button onClick={resetOnClick}>Try again</button>
+    </div>
+  );
+};
+
+```
+
+이 컴포넌트를 사용하여 Loading 및 Error가 발생할 수 있는 부분을 감쌌습니다.
+
+```typescript
+// src/components/Chart/ChartContainer.tsx
+export const ChartContainer = () => {
+  const [showChart, setShowChart] = useState < boolean > false;
+  const [btnText, setBtnText] = useState < string > '';
+
+  useEffect(() => {
+    setBtnText(showChart ? '차트 숨기기' : '차트 보기');
+  }, [showChart]);
+
+  const toggleShowChart = () => setShowChart(prev => !prev);
+
+  return (
+    <Container>
+      <Btn onClick={toggleShowChart}>{btnText}</Btn>
+      {showChart && (
+        <ResetBoundaryWrapper>
+          <MainChart />
+        </ResetBoundaryWrapper>
+      )}
+    </Container>
+  );
+};
+```
+
+### 2. 호버 기능 구현
+
+호버 기능의 경우 ApexCharts 라이브러리에서 기본적으로 차트 호버시 ToolTip을 보여주는 기능이 있었기 때문에 쉽게 구현할 수 있었습니다. 다만, 옵션 내부에서 formatter를 통해 ToolTip의 내용을 원하는 형태로 구성해야 했습니다.
+
+```typescript
+// src/hooks/useMainChartConfig.tsx
+export const useMainChartConfig = ({ data, selectedId }: Props) => {
+  //...
+
+  useEffect(() => {
+    if (!data) return;
+
+    const newOption: ApexOptions = {
+      // ...more options
+      tooltip: {
+        shared: true,
+        intersect: false,
+        x: {
+          formatter: function (_, { dataPointIndex }) {
+            return data.id[dataPointIndex];
+          },
         },
-
-        findCache: key => {
-          const cacheData = get().cache[key];
-          if (cacheData) {
-            const hasExpired = cacheData.due < Date.now();
-            if (hasExpired) return undefined;
-            return cacheData.data;
-          } else {
-            return undefined;
-          }
+        y: {
+          formatter: function (y) {
+            if (typeof y !== 'undefined') {
+              return y.toFixed(0);
+            }
+            return y;
+          },
         },
-      }),
-      { name: 'cacheStore' },
-    ),
-  ),
-);
+      },
+    };
+    setOptions(newOption);
+  }, [data, selectedId, colorBySelectedId]);
+
+  //...
+
+  return {
+    series,
+    options,
+  };
+};
+```
+
+### 3. 필터링 기능 구현
+
+필터 버튼을 누르면 selectedId가 변경되고, 이 값을 차트의 옵션을 구성하는 커스텀 훅인 `useMainChartConfig`가 받아 차트의 옵션을 새로 구성하여 반환하도록 했습니다.
+
+```typescript
+// src/components/Chart/MainChart.tsx
+export const MainChart = () => {
+  //...
+
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  const { series, options } = useMainChartConfig({ data, selectedId });
+
+  //...
+};
+```
+
+ApexCharts에서 colors 옵션에 series의 수만큼 색상을 지정해주면 각 series에 colors 옵션에 같은 인덱스에 지정된 색상이 적용됩니다.
+
+```typescript
+// series의 값
+[
+  {
+    name: 'value_bar',
+    type: 'column',
+    data: data.bar,
+  },
+  {
+    name: 'value_area',
+    type: 'area',
+    data: data.area,
+  },
+];
+```
+
+```typescript
+// color option
+colors: [colorBySelectedId, '#00E396'],
+```
+
+colorBySelectedId 함수를 정의하여 selectedId에 따라 각 column의 색을 순서대로 담은 배열을 반환하여 옵션에 사용했습니다. 이 때 colorBySelectedId 함수는 useCallback을 사용하여 해당 함수의 반복적인 생성을 방지했습니다.
+
+```typescript
+const DEFAULT_COLUMN_COLOR = '#008FFB';
+const HIGHLIGHT_COLUMN_COLOR = '#ff6060';
+
+export const useMainChartConfig = ({ data, selectedId }: Props) => {
+  //...
+
+  const colorBySelectedId = useCallback(
+    ({ dataPointIndex }: { dataPointIndex: number }) => {
+      if (selectedId === null) {
+        return DEFAULT_COLUMN_COLOR;
+      } else {
+        if (data?.id[dataPointIndex] === selectedId) return HIGHLIGHT_COLUMN_COLOR;
+        return DEFAULT_COLUMN_COLOR;
+      }
+    },
+    [selectedId, data],
+  );
+
+  useEffect(() => {
+    if (!data) return;
+
+    const newOption: ApexOptions = {
+      //...more options
+
+      colors: [colorBySelectedId, '#00E396'],
+
+      //...more options
+    };
+
+    setOptions(newOption);
+  }, [data, selectedId, colorBySelectedId]);
+};
+```
+
+---
+
+## 🛠️ 이슈 및 고민
+
+### 1. 필터링 id 변경 시 차트 재렌더링 안되는 이슈
+
+selectedId가 변경될 때, options가 변경됐는데로 불구하고 Chart가 다시 렌더링되지 않는 이슈가 있었습니다. options의 내용을 변수에 할당하여 state를 변경하는 방법을 사용하여 options의 이전 상태값과 현재 상태값의 Object.is 비교를 비교했고, 그 결과가 false인 것을 확인했습니다. 하지만 이 방법을 사용했음에도 재렌더링이 발생하지 않았습니다.
+
+이러한 이유로 강제로 재렌더링 할 수 있는 방법을 사용하고자 했습니다. 임의의 state를 만들어 Options이 발생할 때 Date.now()의 값을 할당하여 상태를 변경하여 차트의 재렌더링이 발생할 수 있도록 했습니다. 하지만, 이 방법을 사용했음에도 재렌더링이 발생하지 않았습니다.
+
+결과적으로 useRef를 사용해 selectedId가 변경됐을 때 직접 DOM을 조작하여 차트에 변경된 options를 반영하도록 했습니다.
+
+```typescript
+export const MainChart = () => {
+  //...
+
+  const chartRef = useRef<ChartType | null>(null);
+
+  useEffect(() => {
+    if (!data) return;
+
+    if (chartRef.current && chartRef.current.chart) {
+      chartRef.current.chart.updateOptions(options, true, true, false);
+    }
+  }, [selectedId, data, options]);
+
+  //...
+
+  return (
+    <ChartWrapper>
+      <FilterList selectedId={selectedId} selectId={chooseFilter} />
+      {options && series && (
+        <ApexCharts ref={chartRef} options={options} series={series} type="line" height={350} />
+      )}
+    </ChartWrapper>
+  );
+};
+```
+
+이 때, ref에 담기는 값이 ApexCharts 라이브러리에 내장된 type이 없어서 이에 맞는 타입을 정의하여 사용했습니다.
+
+```typescript
+// src/types/chart.ts
+export interface ChartType extends ReactApexChart {
+  chart: {
+    updateOptions: (
+      newOptions: ApexOptions | null,
+      redrawPaths?: boolean,
+      animate?: boolean,
+      updateSyncedCharts?: boolean,
+    ) => void;
+  };
+}
 ```

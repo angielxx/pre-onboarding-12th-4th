@@ -8,6 +8,9 @@ interface Props {
   selectedId: string | null;
 }
 
+const DEFAULT_COLUMN_COLOR = '#008FFB';
+const HIGHLIGHT_COLUMN_COLOR = '#ff6060';
+
 export const useMainChartConfig = ({ data, selectedId }: Props) => {
   const [options, setOptions] = useState<ApexOptions | null>(null);
   const [series, setSeries] = useState<SeriesType[] | null>();
@@ -15,10 +18,10 @@ export const useMainChartConfig = ({ data, selectedId }: Props) => {
   const colorBySelectedId = useCallback(
     ({ dataPointIndex }: { dataPointIndex: number }) => {
       if (selectedId === null) {
-        return '#008FFB';
+        return DEFAULT_COLUMN_COLOR;
       } else {
-        if (data?.id[dataPointIndex] === selectedId) return '#ff6060';
-        return '#008FFB';
+        if (data?.id[dataPointIndex] === selectedId) return HIGHLIGHT_COLUMN_COLOR;
+        return DEFAULT_COLUMN_COLOR;
       }
     },
     [selectedId, data],

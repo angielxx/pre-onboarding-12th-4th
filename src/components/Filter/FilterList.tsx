@@ -12,7 +12,7 @@ interface Props {
 
 export const FilterList = ({ selectedId, selectId }: Props) => {
   const queryclient = useQueryClient();
-  const data = queryclient.getQueryData<MainDataType>(['data']);
+  const data = queryclient.getQueryData<MainDataType>(['MainData']);
 
   const [filterIds, setFilterIds] = useState<string[] | null>(null);
 

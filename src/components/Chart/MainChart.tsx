@@ -9,7 +9,7 @@ import { FetchAndDefineMainData } from '@/utils/mainData';
 import { useMainChartConfig } from '@/hooks/useMainChartConfig';
 
 export const MainChart = () => {
-  const { data } = useQuery(['data'], FetchAndDefineMainData);
+  const { data } = useQuery(['MainData'], FetchAndDefineMainData);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
