@@ -1,37 +1,39 @@
-import { useQuery, useQueryErrorResetBoundary } from '@tanstack/react-query';
-import { getData } from './apis';
 import { styled } from 'styled-components';
-import { Suspense } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
-import { ErrorFallback } from './components/ErrorFallback';
-import { Loading } from './components/Loading';
-import { Chart } from './components/Chart';
+import { QueryErrorResetBoundary } from '@tanstack/react-query';
+
+import { ErrorFallback, Loading, MainChart } from '@/components';
 
 function App() {
-  const DEFAULT_STALE_TIME = 1000 * 60 * 60;
+  const [showChart, setShowChart] = useState<boolean>(false);
+  const [btnText, setBtnText] = useState<string>('');
 
-  const { data, error } = useQuery(['data'], getData, {
-    suspense: true,
-    staleTime: DEFAULT_STALE_TIME,
-  });
+  useEffect(() => {
+    setBtnText(showChart ? '차트 숨기기' : '차트 보기');
+  }, [showChart]);
 
-  const { reset } = useQueryErrorResetBoundary();
+  const toggleShowChart = () => setShowChart(prev => !prev);
 
   return (
     <PageContainer>
-      <div>
-        <h3>차트</h3>
-        <Suspense fallback={<Loading />}>
-          <ErrorBoundary
-            onReset={reset}
-            fallbackRender={({ resetErrorBoundary }) => (
-              <ErrorFallback resetErrorBoundary={resetErrorBoundary} error={error} />
-            )}
-          >
-            <Chart data={data} />
-          </ErrorBoundary>
-        </Suspense>
-      </div>
+      <button onClick={toggleShowChart}>{btnText}</button>
+      {showChart && (
+        <QueryErrorResetBoundary>
+          {({ reset }) => (
+            <ErrorBoundary
+              onReset={reset}
+              fallbackRender={({ error, resetErrorBoundary }) => (
+                <ErrorFallback reset={resetErrorBoundary} error={error} />
+              )}
+            >
+              <Suspense fallback={<Loading />}>
+                <MainChart />
+              </Suspense>
+            </ErrorBoundary>
+          )}
+        </QueryErrorResetBoundary>
+      )}
     </PageContainer>
   );
 }
@@ -41,4 +43,8 @@ export default App;
 const PageContainer = styled.div`
   width: 100vw;
   height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
 `;

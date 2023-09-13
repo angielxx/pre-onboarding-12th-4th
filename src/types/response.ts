@@ -4,6 +4,6 @@ export interface DataItem {
   value_bar: number;
 }
 
-export interface DataType {
+export interface ResponseType {
   [key: string]: DataItem;
 }
