@@ -1,8 +1,8 @@
+import { useEffect, useState } from 'react';
 import styled from 'styled-components';
+import { useQueryClient } from '@tanstack/react-query';
 
 import { FilterChip } from '@/components';
-import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
 import { MainDataType } from '@/types/chart';
 
 interface Props {
@@ -12,7 +12,6 @@ interface Props {
 
 export const FilterList = ({ selectedId, selectId }: Props) => {
   const queryclient = useQueryClient();
-
   const data = queryclient.getQueryData<MainDataType>(['data']);
 
   const [filterIds, setFilterIds] = useState<string[] | null>(null);

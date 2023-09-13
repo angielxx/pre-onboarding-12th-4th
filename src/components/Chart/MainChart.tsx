@@ -42,5 +42,5 @@ export const MainChart = () => {
 };
 
 const ChartWrapper = styled.div`
-  width: 90vw;
+  width: 100%;
 `;

@@ -1,5 +1,5 @@
-import { ApexOptions } from 'apexcharts';
 import { useCallback, useEffect, useState } from 'react';
+import { ApexOptions } from 'apexcharts';
 
 import { MainDataType, SeriesType } from '@/types/chart';
 
@@ -120,7 +120,7 @@ export const useMainChartConfig = ({ data, selectedId }: Props) => {
         intersect: false,
         x: {
           formatter: function (_, { dataPointIndex }) {
-            return data?.id[dataPointIndex];
+            return data.id[dataPointIndex];
           },
         },
         y: {
