@@ -5,6 +5,7 @@ export interface SeriesType {
 }
 
 export interface MainDataType {
+  id: string[];
   labels: string[];
   bar: number[];
   area: number[];
