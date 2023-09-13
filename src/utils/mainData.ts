@@ -1,5 +1,5 @@
 import { getData } from '@/apis/api';
-import { MainDataType } from '@/types/MainChart';
+import { MainDataType } from '@/types/chart';
 
 export const FetchAndDefineMainData: () => Promise<MainDataType> = async () => {
   const data = await getData();
